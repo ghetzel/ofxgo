@@ -21,21 +21,29 @@ func NewVanguardClient(bc *BasicClient) Client {
 }
 
 // rawRequestCookies is RawRequest with the added feature of sending cookies
-func rawRequestCookies(URL string, r io.Reader, cookies []*http.Cookie) (*http.Response, error) {
-	if !strings.HasPrefix(URL, "https://") {
-		return nil, errors.New("Refusing to send OFX request with possible plain-text password over non-https protocol")
+func (c *VanguardClient) rawRequestCookies(URL string, r io.Reader, cookies []*http.Cookie) (*http.Response, error) {
+	if !c.Insecure {
+		if !strings.HasPrefix(URL, "https://") {
+			return nil, errors.New("Refusing to send OFX request with possible plain-text password over non-https protocol")
+		}
 	}
 
 	request, err := http.NewRequest("POST", URL, r)
 	if err != nil {
 		return nil, err
 	}
+
 	request.Header.Set("Content-Type", "application/x-ofx")
+
 	for _, cookie := range cookies {
 		request.AddCookie(cookie)
 	}
 
-	response, err := http.DefaultClient.Do(request)
+	if err := c.prepRequest(request); err != nil {
+		return nil, err
+	}
+
+	response, err := c.httpClient().Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +76,7 @@ func (c *VanguardClient) RequestNoParse(r *Request) (*http.Response, error) {
 			return nil, err
 		}
 
-		return rawRequestCookies(r.URL, b, response.Cookies())
+		return c.rawRequestCookies(r.URL, b, response.Cookies())
 	}
 
 	return response, err
